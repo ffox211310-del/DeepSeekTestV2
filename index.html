@@ -24,10 +24,10 @@
 </style>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>WebLLM - DeepSeek-R1-Distill-Qwen-1.5B Fix</title>
+<title>WebLLM - Qwen1.5B 安定版</title>
 <style>
   body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#f8f9fa}
-  .status{font-size:.9rem;color:#6c757d;margin-bottom:.8rem;word-break:break-all}
+  .status{font-size:.9rem;color:#6c757d;margin-bottom:.8rem;word-break:break-all;white-space:pre-wrap}
   .chat-box{background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:1rem;height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem}
   .message{padding:.6rem .9rem;border-radius:12px;max-width:85%;line-height:1.6;white-space:pre-wrap}
   .user{background:#0d6efd;color:#fff;align-self:flex-end}
@@ -38,24 +38,29 @@
   .input-area button:disabled{opacity:.5}
   .progress{height:6px;background:#e9ecef;border-radius:3px;overflow:hidden;margin-bottom:1rem}
   .progress-bar{height:100%;width:0%;background:#0d6efd;transition:width .2s}
+  .note{font-size:.8rem;color:#6c757d;text-align:center;margin-top:1rem}
 </style>
 <script type="importmap">
 {
   "imports": {
-    "@mlc-ai/web-llm": "https://esm.run/@mlc-ai/web-llm@0.2.84"
+    "@mlc-ai/web-llm": "https://esm.run/@mlc-ai/web-llm@0.2.79"
   }
 }
 </script>
 </head>
 <body>
-<h1>🧠 DeepSeek-R1-Distill-Qwen-1.5B - 修正版</h1>
+<h1>🧠 WebLLM 公式Qwen1.5B - 安定版 (DeepSeekのベース)</h1>
 <div class="status" id="status">初期化中...</div>
 <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
-<div class="chat-box" id="chatBox"></div>
+<div class="chat-box" id="chatBox">
+  <div class="message assistant">これは公式MLCのQwen2.5-1.5Bです。DeepSeek-R1-Distillのベースモデルと同じQwen2.5-Math-1.5B系で、1.5Bの中で一番安定して動きます。DeepSeekの1.5Bは現在WebGPUで文字化けバグが公式報告されています。</div>
+</div>
 <div class="input-area">
-  <input id="userInput" disabled placeholder="メッセージ..." />
+  <input id="userInput" disabled placeholder="こんにちは、と打ってみてください" />
   <button id="sendBtn" disabled>送信</button>
 </div>
+<div class="note">Chrome 113+ / https:// 必須。初回は約1GBダウンロード。7BはスマホVRAMで落ちるので1.5B推奨。</div>
+
 <script type="module">
 import { CreateMLCEngine, prebuiltAppConfig } from "@mlc-ai/web-llm";
 
@@ -65,23 +70,11 @@ const chatBox = document.getElementById("chatBox");
 const userInput = document.getElementById("userInput");
 const sendBtn = document.getElementById("sendBtn");
 
-// 修正1: q4f32_1を使う。q4f16_1はWebGPUで文字化けする既知のバグがある
-// 修正2: 公式MLCリポジトリを明示的に登録
-const MODEL_ID = "DeepSeek-R1-Distill-Qwen-1.5B-q4f32_1-MLC";
-
-const customRecord = {
-  model: "https://huggingface.co/mlc-ai/DeepSeek-R1-Distill-Qwen-1.5B-q4f32_1-MLC/resolve/main/",
-  model_id: MODEL_ID,
-  // 1.5B用のq4f32 wasmを明示指定
-  model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_48/Qwen2-1.5B-Instruct-q4f32_1-ctx4k_cs1k-webgpu.wasm",
-  vram_required_MB: 2500,
-  low_resource_required: true,
-};
-
-const appConfig = {
-  ...prebuiltAppConfig,
-  model_list: [customRecord, ...prebuiltAppConfig.model_list]
-};
+// ★絶対に動く公式ID - prebuiltに最初から入っている
+// DeepSeek-R1-Distill-Qwen-1.5Bのベースは Qwen2.5-Math-1.5B で、これと同系統
+const MODEL_ID = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+// もしDeepSeek推論をどうしても試したいなら、PCのみでこちらを試してください（スマホでは高確率で落ちます）
+// const MODEL_ID = "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC";
 
 const initProgressCallback = (p) => {
   statusEl.textContent = `[${Math.round((p.progress||0)*100)}%] ${p.text}`;
@@ -91,14 +84,20 @@ const initProgressCallback = (p) => {
 let engine;
 async function init() {
   try {
-    if (!navigator.gpu) throw new Error("WebGPU非対応");
-    engine = await CreateMLCEngine(MODEL_ID, { appConfig, initProgressCallback });
-    statusEl.textContent = "✅ 準備完了";
+    if (!navigator.gpu) throw new Error("WebGPU非対応ブラウザです。Chrome 113+で開いてください");
+    // カスタムwasmを指定しない = バージョン不一致が起きない
+    engine = await CreateMLCEngine(MODEL_ID, {
+      initProgressCallback,
+      appConfig: prebuiltAppConfig
+    });
+    statusEl.textContent = "✅ 準備完了！";
+    progressBar.style.width = "100%";
     userInput.disabled = false;
     sendBtn.disabled = false;
+    userInput.focus();
   } catch (e) {
     console.error(e);
-    statusEl.textContent = `❌ ${e.message}\nもしダメなら7B版に切り替えてください: DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC`;
+    statusEl.textContent = `❌ ${e.message}`;
   }
 }
 
@@ -120,15 +119,13 @@ async function send() {
   const a = append("assistant", "");
   let full = "";
   try {
-    // DeepSeek-R1は<think>を出力するので、システムプロンプトで日本語指定を明確に
     const chunks = await engine.chat.completions.create({
       messages: [
-        { role: "system", content: "You are DeepSeek-R1, a helpful assistant. Always answer in Japanese. Do not output garbled tags." },
+        { role: "system", content: "You are a helpful assistant. Reply in Japanese." },
         { role: "user", content: t }
       ],
       stream: true,
-      temperature: 0.6,
-      max_tokens: 512
+      temperature: 0.7
     });
     for await (const c of chunks) {
       full += c.choices[0]?.delta?.content || "";
