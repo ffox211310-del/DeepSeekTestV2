@@ -24,42 +24,38 @@
 </style>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>WebLLM - DeepSeek-R1-Distill-Qwen-1.5B 公式MLC</title>
+<title>WebLLM - DeepSeek-R1-Distill-Qwen-1.5B Fix</title>
 <style>
-  body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#f8f9fa;color:#212529}
-  h1{font-size:1.35rem}
-  .status{font-size:.9rem;color:#6c757d;margin-bottom:.8rem;min-height:1.5rem;word-break:break-all}
+  body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#f8f9fa}
+  .status{font-size:.9rem;color:#6c757d;margin-bottom:.8rem;word-break:break-all}
   .chat-box{background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:1rem;height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem}
   .message{padding:.6rem .9rem;border-radius:12px;max-width:85%;line-height:1.6;white-space:pre-wrap}
   .user{background:#0d6efd;color:#fff;align-self:flex-end}
-  .assistant{background:#e9ecef;color:#212529;align-self:flex-start}
+  .assistant{background:#e9ecef;align-self:flex-start}
   .input-area{display:flex;gap:.5rem}
-  .input-area input{flex:1;padding:.6rem 1rem;border:1px solid #ced4da;border-radius:20px;font-size:1rem}
-  .input-area button{padding:.6rem 1.4rem;background:#0d6efd;color:#fff;border:none;border-radius:20px;cursor:pointer}
-  .input-area button:disabled{opacity:.5;cursor:not-allowed}
+  .input-area input{flex:1;padding:.6rem 1rem;border:1px solid #ced4da;border-radius:20px}
+  .input-area button{padding:.6rem 1.4rem;background:#0d6efd;color:#fff;border:none;border-radius:20px}
+  .input-area button:disabled{opacity:.5}
   .progress{height:6px;background:#e9ecef;border-radius:3px;overflow:hidden;margin-bottom:1rem}
   .progress-bar{height:100%;width:0%;background:#0d6efd;transition:width .2s}
 </style>
 <script type="importmap">
 {
   "imports": {
-    "@mlc-ai/web-llm": "https://esm.run/@mlc-ai/web-llm@0.2.79"
+    "@mlc-ai/web-llm": "https://esm.run/@mlc-ai/web-llm@0.2.84"
   }
 }
 </script>
 </head>
 <body>
-<h1>🧠 WebLLM + DeepSeek-R1-Distill-Qwen-1.5B (公式MLC・カスタム登録版)</h1>
-<div class="status" id="status">WebGPUチェック中...</div>
+<h1>🧠 DeepSeek-R1-Distill-Qwen-1.5B - 修正版</h1>
+<div class="status" id="status">初期化中...</div>
 <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
-<div class="chat-box" id="chatBox">
-  <div class="message assistant">初回は約1.1GBのダウンロードがあります。https:// で開いてください。</div>
-</div>
+<div class="chat-box" id="chatBox"></div>
 <div class="input-area">
-  <input type="text" id="userInput" placeholder="メッセージを入力..." disabled />
+  <input id="userInput" disabled placeholder="メッセージ..." />
   <button id="sendBtn" disabled>送信</button>
 </div>
-
 <script type="module">
 import { CreateMLCEngine, prebuiltAppConfig } from "@mlc-ai/web-llm";
 
@@ -69,103 +65,85 @@ const chatBox = document.getElementById("chatBox");
 const userInput = document.getElementById("userInput");
 const sendBtn = document.getElementById("sendBtn");
 
-// 公式MLCのモデルID - mlc.ai/modelsに存在
-const MODEL_ID = "DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC";
+// 修正1: q4f32_1を使う。q4f16_1はWebGPUで文字化けする既知のバグがある
+// 修正2: 公式MLCリポジトリを明示的に登録
+const MODEL_ID = "DeepSeek-R1-Distill-Qwen-1.5B-q4f32_1-MLC";
 
-// prebuiltAppConfigにはまだ入っていないので、自分で追加する
-// mlc-aiのHuggingFaceリポジトリを直接指す
-const customModelRecord = {
-  model: "https://huggingface.co/mlc-ai/DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC/resolve/main/",
+const customRecord = {
+  model: "https://huggingface.co/mlc-ai/DeepSeek-R1-Distill-Qwen-1.5B-q4f32_1-MLC/resolve/main/",
   model_id: MODEL_ID,
-  // Qwen2-1.5B系のwasmを流用 (アーキテクチャ同じ)
-  model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_48/Qwen2-1.5B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
-  vram_required_MB: 1900,
+  // 1.5B用のq4f32 wasmを明示指定
+  model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_48/Qwen2-1.5B-Instruct-q4f32_1-ctx4k_cs1k-webgpu.wasm",
+  vram_required_MB: 2500,
   low_resource_required: true,
-  overrides: {
-    context_window_size: 4096
-  }
 };
 
 const appConfig = {
   ...prebuiltAppConfig,
-  // 自分のモデルを先頭に追加 + 既存リストを後ろに
-  model_list: [customModelRecord, ...prebuiltAppConfig.model_list],
-  cacheBackend: "cache"
+  model_list: [customRecord, ...prebuiltAppConfig.model_list]
 };
 
-if (!navigator.gpu) {
-  statusEl.textContent = "❌ WebGPU非対応です。Chrome 113+ / Edge 113+ を https:// で開いてください。";
-  throw new Error("WebGPU not supported");
-}
-
-let engine;
 const initProgressCallback = (p) => {
   statusEl.textContent = `[${Math.round((p.progress||0)*100)}%] ${p.text}`;
   if (p.progress) progressBar.style.width = `${Math.round(p.progress*100)}%`;
 };
 
+let engine;
 async function init() {
   try {
-    engine = await CreateMLCEngine(
-      MODEL_ID,
-      { initProgressCallback, appConfig }
-    );
-    statusEl.textContent = "✅ 準備完了！";
-    progressBar.style.width = "100%";
+    if (!navigator.gpu) throw new Error("WebGPU非対応");
+    engine = await CreateMLCEngine(MODEL_ID, { appConfig, initProgressCallback });
+    statusEl.textContent = "✅ 準備完了";
     userInput.disabled = false;
     sendBtn.disabled = false;
-    userInput.focus();
-  } catch (err) {
-    console.error(err);
-    statusEl.textContent = `❌ 初期化失敗: ${err.message}\nコンソールも確認してください`;
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = `❌ ${e.message}\nもしダメなら7B版に切り替えてください: DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC`;
   }
 }
 
-function appendMessage(role, content) {
-  const div = document.createElement("div");
-  div.className = `message ${role}`;
-  div.textContent = content;
-  chatBox.appendChild(div);
+function append(role, text) {
+  const d = document.createElement("div");
+  d.className = `message ${role}`;
+  d.textContent = text;
+  chatBox.appendChild(d);
   chatBox.scrollTop = chatBox.scrollHeight;
-  return div;
+  return d;
 }
 
-async function sendMessage() {
-  const text = userInput.value.trim();
-  if (!text || !engine) return;
+async function send() {
+  const t = userInput.value.trim();
+  if (!t || !engine) return;
   userInput.value = "";
-  userInput.disabled = true;
-  sendBtn.disabled = true;
-  appendMessage("user", text);
-  const assistantEl = appendMessage("assistant", "");
+  userInput.disabled = true; sendBtn.disabled = true;
+  append("user", t);
+  const a = append("assistant", "");
   let full = "";
   try {
+    // DeepSeek-R1は<think>を出力するので、システムプロンプトで日本語指定を明確に
     const chunks = await engine.chat.completions.create({
       messages: [
-        { role: "system", content: "You are a helpful AI assistant. Answer in Japanese." },
-        { role: "user", content: text }
+        { role: "system", content: "You are DeepSeek-R1, a helpful assistant. Always answer in Japanese. Do not output garbled tags." },
+        { role: "user", content: t }
       ],
       stream: true,
-      temperature: 0.7
+      temperature: 0.6,
+      max_tokens: 512
     });
-    for await (const chunk of chunks) {
-      full += chunk.choices[0]?.delta?.content || "";
-      assistantEl.textContent = full;
+    for await (const c of chunks) {
+      full += c.choices[0]?.delta?.content || "";
+      a.textContent = full;
       chatBox.scrollTop = chatBox.scrollHeight;
     }
   } catch (e) {
-    assistantEl.textContent = `❌ ${e.message}`;
+    a.textContent = `エラー: ${e.message}`;
   } finally {
-    userInput.disabled = false;
-    sendBtn.disabled = false;
-    userInput.focus();
+    userInput.disabled = false; sendBtn.disabled = false; userInput.focus();
   }
 }
 
-sendBtn.addEventListener("click", sendMessage);
-userInput.addEventListener("keydown", e => {
-  if (e.key === "Enter") { e.preventDefault(); sendMessage(); }
-});
+sendBtn.onclick = send;
+userInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } };
 
 init();
 </script>
