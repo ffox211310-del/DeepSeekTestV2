@@ -24,11 +24,11 @@
 </style>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>WebLLM - DeepSeek-R1-Distill-Qwen-1.5B</title>
+<title>WebLLM - DeepSeek-R1-Distill-Qwen-1.5B 公式MLC</title>
 <style>
   body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#f8f9fa;color:#212529}
-  h1{font-size:1.4rem}
-  .status{font-size:.9rem;color:#6c757d;margin-bottom:1rem;min-height:1.5rem;word-break:break-all}
+  h1{font-size:1.35rem}
+  .status{font-size:.9rem;color:#6c757d;margin-bottom:.8rem;min-height:1.5rem;word-break:break-all}
   .chat-box{background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:1rem;height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem}
   .message{padding:.6rem .9rem;border-radius:12px;max-width:85%;line-height:1.6;white-space:pre-wrap}
   .user{background:#0d6efd;color:#fff;align-self:flex-end}
@@ -49,60 +49,66 @@
 </script>
 </head>
 <body>
-<h1>🧠 WebLLM + DeepSeek-R1-Distill-Qwen-1.5B (公式MLC)</h1>
+<h1>🧠 WebLLM + DeepSeek-R1-Distill-Qwen-1.5B (公式MLC・カスタム登録版)</h1>
 <div class="status" id="status">WebGPUチェック中...</div>
 <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
 <div class="chat-box" id="chatBox">
-  <div class="message assistant">モデルが準備できたら話しかけてください。初回は1.1GBほどダウンロードします。</div>
+  <div class="message assistant">初回は約1.1GBのダウンロードがあります。https:// で開いてください。</div>
 </div>
 <div class="input-area">
   <input type="text" id="userInput" placeholder="メッセージを入力..." disabled />
   <button id="sendBtn" disabled>送信</button>
 </div>
-<p style="font-size:.8rem;color:#6c757d;text-align:center;margin-top:1rem">Chrome 113+ / Edge 113+ のWebGPU必須。https:// または http://localhost で開いてください。file:// では動きません。</p>
 
 <script type="module">
 import { CreateMLCEngine, prebuiltAppConfig } from "@mlc-ai/web-llm";
 
-// DOM
 const statusEl = document.getElementById("status");
 const progressBar = document.getElementById("progressBar");
 const chatBox = document.getElementById("chatBox");
 const userInput = document.getElementById("userInput");
 const sendBtn = document.getElementById("sendBtn");
 
-// 公式の1.5B ID - mlc.ai/modelsに存在【2036660470793171123†L360-L364】
+// 公式MLCのモデルID - mlc.ai/modelsに存在
 const MODEL_ID = "DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC";
-// 高精度が欲しければ q4f32_1 に変えてください: "DeepSeek-R1-Distill-Qwen-1.5B-q4f32_1-MLC"
+
+// prebuiltAppConfigにはまだ入っていないので、自分で追加する
+// mlc-aiのHuggingFaceリポジトリを直接指す
+const customModelRecord = {
+  model: "https://huggingface.co/mlc-ai/DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC/resolve/main/",
+  model_id: MODEL_ID,
+  // Qwen2-1.5B系のwasmを流用 (アーキテクチャ同じ)
+  model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_48/Qwen2-1.5B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
+  vram_required_MB: 1900,
+  low_resource_required: true,
+  overrides: {
+    context_window_size: 4096
+  }
+};
+
+const appConfig = {
+  ...prebuiltAppConfig,
+  // 自分のモデルを先頭に追加 + 既存リストを後ろに
+  model_list: [customModelRecord, ...prebuiltAppConfig.model_list],
+  cacheBackend: "cache"
+};
 
 if (!navigator.gpu) {
-  statusEl.textContent = "❌ このブラウザはWebGPU非対応です。Chrome 113+ / Edge 113+ で https:// で開いてください。";
+  statusEl.textContent = "❌ WebGPU非対応です。Chrome 113+ / Edge 113+ を https:// で開いてください。";
   throw new Error("WebGPU not supported");
 }
 
 let engine;
-const initProgressCallback = (progress) => {
-  statusEl.textContent = progress.text;
-  // progress.progress は 0-1
-  if (progress.progress) {
-    progressBar.style.width = `${Math.round(progress.progress * 100)}%`;
-  }
-  console.log(progress);
+const initProgressCallback = (p) => {
+  statusEl.textContent = `[${Math.round((p.progress||0)*100)}%] ${p.text}`;
+  if (p.progress) progressBar.style.width = `${Math.round(p.progress*100)}%`;
 };
 
 async function init() {
   try {
-    // 公式推奨の作り方: CreateMLCEngine + prebuiltAppConfig
     engine = await CreateMLCEngine(
       MODEL_ID,
-      {
-        initProgressCallback,
-        appConfig: {
-          ...prebuiltAppConfig,
-          // GitHub Pages / Cloudflare Pagesでもキャッシュが効く
-          cacheBackend: "cache"
-        }
-      }
+      { initProgressCallback, appConfig }
     );
     statusEl.textContent = "✅ 準備完了！";
     progressBar.style.width = "100%";
@@ -111,7 +117,7 @@ async function init() {
     userInput.focus();
   } catch (err) {
     console.error(err);
-    statusEl.textContent = `❌ 初期化失敗: ${err.message}`;
+    statusEl.textContent = `❌ 初期化失敗: ${err.message}\nコンソールも確認してください`;
   }
 }
 
@@ -130,11 +136,9 @@ async function sendMessage() {
   userInput.value = "";
   userInput.disabled = true;
   sendBtn.disabled = true;
-
   appendMessage("user", text);
   const assistantEl = appendMessage("assistant", "");
   let full = "";
-
   try {
     const chunks = await engine.chat.completions.create({
       messages: [
@@ -145,14 +149,12 @@ async function sendMessage() {
       temperature: 0.7
     });
     for await (const chunk of chunks) {
-      const delta = chunk.choices[0]?.delta?.content || "";
-      full += delta;
+      full += chunk.choices[0]?.delta?.content || "";
       assistantEl.textContent = full;
       chatBox.scrollTop = chatBox.scrollHeight;
     }
   } catch (e) {
-    console.error(e);
-    assistantEl.textContent = `❌ エラー: ${e.message}`;
+    assistantEl.textContent = `❌ ${e.message}`;
   } finally {
     userInput.disabled = false;
     sendBtn.disabled = false;
@@ -161,11 +163,8 @@ async function sendMessage() {
 }
 
 sendBtn.addEventListener("click", sendMessage);
-userInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    sendMessage();
-  }
+userInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); sendMessage(); }
 });
 
 init();
