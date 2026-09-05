@@ -1,38 +1,225 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>iF2006</title>
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebLLM DeepSeek チャット</title>
+    <style>
+        /* 簡素なUIのためのCSS */
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            background: #f8f9fa;
+            color: #212529;
+        }
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .status {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-bottom: 1rem;
+            min-height: 1.5rem;
+        }
+        .chat-box {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .message {
+            padding: 0.5rem 0.75rem;
+            border-radius: 12px;
+            max-width: 80%;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+        .message.user {
+            background: #0d6efd;
+            color: white;
+            align-self: flex-end;
+        }
+        .message.assistant {
+            background: #e9ecef;
+            color: #212529;
+            align-self: flex-start;
+        }
+        .input-area {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 0.6rem 1rem;
+            border: 1px solid #ced4da;
+            border-radius: 20px;
+            font-size: 1rem;
+        }
+        .input-area input:focus {
+            outline: none;
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+        }
+        .input-area button {
+            padding: 0.6rem 1.5rem;
+            background: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .input-area button:hover:not(:disabled) {
+            background: #0b5ed7;
+        }
+        .input-area button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .footer-note {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: #6c757d;
+            text-align: center;
+        }
+    </style>
 </head>
-
 <body>
 
-<div id="stars"></div>
+    <h1>🧠 WebLLM + DeepSeek-R1-Distill-Qwen-1.5B</h1>
+    <div class="status" id="status">⏳ モデルを読み込み中…（初回は時間がかかります）</div>
 
-<div class="center">
+    <div class="chat-box" id="chatBox">
+        <div class="message assistant">こんにちは！ メッセージを入力してください。</div>
+    </div>
 
-<h1>iF2006</h1>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="メッセージを入力…" disabled />
+        <button id="sendBtn" disabled>送信</button>
+    </div>
+    <div class="footer-note">⚠️ モデルサイズは約 1.1GB です。WebGPU 対応ブラウザ（Chrome 113+）が必要です。</div>
 
-<input
-id="search"
-placeholder="Search with DuckDuckGo">
+    <script type="importmap">
+        {
+            "imports": {
+                "@mlc-ai/web-llm": "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.78/lib/index.js"
+            }
+        }
+    </script>
 
-<button onclick="searchWeb()">
-SEARCH
-</button>
+    <script type="module">
+        // ----- 必要なモジュールをインポート -----
+        import * as webllm from "@mlc-ai/web-llm";
 
-</div>
+        // ----- DOM 要素の参照 -----
+        const statusEl = document.getElementById("status");
+        const chatBox = document.getElementById("chatBox");
+        const userInput = document.getElementById("userInput");
+        const sendBtn = document.getElementById("sendBtn");
 
-<script src="script.js"></script>
+        // ----- 使用するモデルの設定 -----
+        // 量子化方式: q4f16_1 (サイズと性能のバランスが良い)
+        const MODEL_ID = "willopcbeta/DeepSeek-R1-Distill-Qwen-1.5B-Multilingual-q4f16_1-MLC";
 
+        // ----- エンジンの作成 -----
+        const engine = new webllm.MLCEngine();
+
+        // ----- メイン初期化処理 -----
+        async function init() {
+            try {
+                statusEl.textContent = `⏳ モデル「${MODEL_ID}」を読み込み中…（初回は数分かかることがあります）`;
+
+                // モデルをロード（キャッシュがあればそれを使う）
+                await engine.reload(MODEL_ID);
+
+                statusEl.textContent = "✅ モデル準備完了！ メッセージを入力してください。";
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+            } catch (err) {
+                console.error(err);
+                statusEl.textContent = `❌ エラー: ${err.message || "モデルの読み込みに失敗しました"}`;
+            }
+        }
+
+        // ----- チャット送信処理 -----
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // 入力をクリア & 無効化
+            userInput.value = "";
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+
+            // ユーザーメッセージを表示
+            appendMessage("user", text);
+
+            // アシスタントのメッセージ枠を準備（ストリーミング中用）
+            const assistantMsg = appendMessage("assistant", "");
+            let fullContent = "";
+
+            try {
+                // ストリーミングで応答を生成
+                const chunks = await engine.chat.completions.create({
+                    messages: [
+                        { role: "user", content: text }
+                    ],
+                    stream: true, // ストリーミング有効
+                });
+
+                // チャンクを逐次表示
+                for await (const chunk of chunks) {
+                    const delta = chunk.choices[0]?.delta?.content || "";
+                    fullContent += delta;
+                    assistantMsg.textContent = fullContent;
+                    // 自動スクロール
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            } catch (err) {
+                console.error(err);
+                assistantMsg.textContent = `❌ エラー: ${err.message || "応答生成に失敗しました"}`;
+            } finally {
+                // 入力を再び有効化
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        // ----- メッセージ追加ヘルパー -----
+        function appendMessage(role, content) {
+            const div = document.createElement("div");
+            div.className = `message ${role}`;
+            div.textContent = content;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            return div;
+        }
+
+        // ----- イベントリスナー -----
+        sendBtn.addEventListener("click", sendMessage);
+        userInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // ----- 起動！ -----
+        init();
+    </script>
 </body>
 </html>
