@@ -1,225 +1,174 @@
 <!DOCTYPE html>
 <html lang="ja">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WebLLM DeepSeek チャット</title>
-    <style>
-        /* 簡素なUIのためのCSS */
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            max-width: 800px;
-            margin: 2rem auto;
-            padding: 0 1rem;
-            background: #f8f9fa;
-            color: #212529;
-        }
-        h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-        .status {
-            font-size: 0.9rem;
-            color: #6c757d;
-            margin-bottom: 1rem;
-            min-height: 1.5rem;
-        }
-        .chat-box {
-            background: white;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 1rem;
-            height: 400px;
-            overflow-y: auto;
-            margin-bottom: 1rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        .message {
-            padding: 0.5rem 0.75rem;
-            border-radius: 12px;
-            max-width: 80%;
-            word-wrap: break-word;
-            line-height: 1.5;
-        }
-        .message.user {
-            background: #0d6efd;
-            color: white;
-            align-self: flex-end;
-        }
-        .message.assistant {
-            background: #e9ecef;
-            color: #212529;
-            align-self: flex-start;
-        }
-        .input-area {
-            display: flex;
-            gap: 0.5rem;
-        }
-        .input-area input {
-            flex: 1;
-            padding: 0.6rem 1rem;
-            border: 1px solid #ced4da;
-            border-radius: 20px;
-            font-size: 1rem;
-        }
-        .input-area input:focus {
-            outline: none;
-            border-color: #0d6efd;
-            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
-        }
-        .input-area button {
-            padding: 0.6rem 1.5rem;
-            background: #0d6efd;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-        .input-area button:hover:not(:disabled) {
-            background: #0b5ed7;
-        }
-        .input-area button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .footer-note {
-            margin-top: 1rem;
-            font-size: 0.8rem;
-            color: #6c757d;
-            text-align: center;
-        }
-    </style>
+<head><style>
+@font-face {
+  font-family: "Optimistic";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/OptimisticAI_VF_Optimized.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Optimistic Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/OptimisticMono_W_TextRegular.woff2") format("woff2");
+}
+:where(html) {
+  font-family: "Optimistic", system-ui, sans-serif;
+}
+:where(code, pre, kbd, samp) {
+  font-family: "Optimistic Mono", ui-monospace, monospace;
+}
+</style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WebLLM - DeepSeek-R1-Distill-Qwen-1.5B</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#f8f9fa;color:#212529}
+  h1{font-size:1.4rem}
+  .status{font-size:.9rem;color:#6c757d;margin-bottom:1rem;min-height:1.5rem;word-break:break-all}
+  .chat-box{background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:1rem;height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem}
+  .message{padding:.6rem .9rem;border-radius:12px;max-width:85%;line-height:1.6;white-space:pre-wrap}
+  .user{background:#0d6efd;color:#fff;align-self:flex-end}
+  .assistant{background:#e9ecef;color:#212529;align-self:flex-start}
+  .input-area{display:flex;gap:.5rem}
+  .input-area input{flex:1;padding:.6rem 1rem;border:1px solid #ced4da;border-radius:20px;font-size:1rem}
+  .input-area button{padding:.6rem 1.4rem;background:#0d6efd;color:#fff;border:none;border-radius:20px;cursor:pointer}
+  .input-area button:disabled{opacity:.5;cursor:not-allowed}
+  .progress{height:6px;background:#e9ecef;border-radius:3px;overflow:hidden;margin-bottom:1rem}
+  .progress-bar{height:100%;width:0%;background:#0d6efd;transition:width .2s}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "@mlc-ai/web-llm": "https://esm.run/@mlc-ai/web-llm@0.2.79"
+  }
+}
+</script>
 </head>
 <body>
+<h1>🧠 WebLLM + DeepSeek-R1-Distill-Qwen-1.5B (公式MLC)</h1>
+<div class="status" id="status">WebGPUチェック中...</div>
+<div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+<div class="chat-box" id="chatBox">
+  <div class="message assistant">モデルが準備できたら話しかけてください。初回は1.1GBほどダウンロードします。</div>
+</div>
+<div class="input-area">
+  <input type="text" id="userInput" placeholder="メッセージを入力..." disabled />
+  <button id="sendBtn" disabled>送信</button>
+</div>
+<p style="font-size:.8rem;color:#6c757d;text-align:center;margin-top:1rem">Chrome 113+ / Edge 113+ のWebGPU必須。https:// または http://localhost で開いてください。file:// では動きません。</p>
 
-    <h1>🧠 WebLLM + DeepSeek-R1-Distill-Qwen-1.5B</h1>
-    <div class="status" id="status">⏳ モデルを読み込み中…（初回は時間がかかります）</div>
+<script type="module">
+import { CreateMLCEngine, prebuiltAppConfig } from "@mlc-ai/web-llm";
 
-    <div class="chat-box" id="chatBox">
-        <div class="message assistant">こんにちは！ メッセージを入力してください。</div>
-    </div>
+// DOM
+const statusEl = document.getElementById("status");
+const progressBar = document.getElementById("progressBar");
+const chatBox = document.getElementById("chatBox");
+const userInput = document.getElementById("userInput");
+const sendBtn = document.getElementById("sendBtn");
 
-    <div class="input-area">
-        <input type="text" id="userInput" placeholder="メッセージを入力…" disabled />
-        <button id="sendBtn" disabled>送信</button>
-    </div>
-    <div class="footer-note">⚠️ モデルサイズは約 1.1GB です。WebGPU 対応ブラウザ（Chrome 113+）が必要です。</div>
+// 公式の1.5B ID - mlc.ai/modelsに存在【2036660470793171123†L360-L364】
+const MODEL_ID = "DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC";
+// 高精度が欲しければ q4f32_1 に変えてください: "DeepSeek-R1-Distill-Qwen-1.5B-q4f32_1-MLC"
 
-    <script type="importmap">
-        {
-            "imports": {
-                "@mlc-ai/web-llm": "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.78/lib/index.js"
-            }
+if (!navigator.gpu) {
+  statusEl.textContent = "❌ このブラウザはWebGPU非対応です。Chrome 113+ / Edge 113+ で https:// で開いてください。";
+  throw new Error("WebGPU not supported");
+}
+
+let engine;
+const initProgressCallback = (progress) => {
+  statusEl.textContent = progress.text;
+  // progress.progress は 0-1
+  if (progress.progress) {
+    progressBar.style.width = `${Math.round(progress.progress * 100)}%`;
+  }
+  console.log(progress);
+};
+
+async function init() {
+  try {
+    // 公式推奨の作り方: CreateMLCEngine + prebuiltAppConfig
+    engine = await CreateMLCEngine(
+      MODEL_ID,
+      {
+        initProgressCallback,
+        appConfig: {
+          ...prebuiltAppConfig,
+          // GitHub Pages / Cloudflare Pagesでもキャッシュが効く
+          cacheBackend: "cache"
         }
-    </script>
+      }
+    );
+    statusEl.textContent = "✅ 準備完了！";
+    progressBar.style.width = "100%";
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+    userInput.focus();
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = `❌ 初期化失敗: ${err.message}`;
+  }
+}
 
-    <script type="module">
-        // ----- 必要なモジュールをインポート -----
-        import * as webllm from "@mlc-ai/web-llm";
+function appendMessage(role, content) {
+  const div = document.createElement("div");
+  div.className = `message ${role}`;
+  div.textContent = content;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+  return div;
+}
 
-        // ----- DOM 要素の参照 -----
-        const statusEl = document.getElementById("status");
-        const chatBox = document.getElementById("chatBox");
-        const userInput = document.getElementById("userInput");
-        const sendBtn = document.getElementById("sendBtn");
+async function sendMessage() {
+  const text = userInput.value.trim();
+  if (!text || !engine) return;
+  userInput.value = "";
+  userInput.disabled = true;
+  sendBtn.disabled = true;
 
-        // ----- 使用するモデルの設定 -----
-        // 量子化方式: q4f16_1 (サイズと性能のバランスが良い)
-        const MODEL_ID = "willopcbeta/DeepSeek-R1-Distill-Qwen-1.5B-Multilingual-q4f16_1-MLC";
+  appendMessage("user", text);
+  const assistantEl = appendMessage("assistant", "");
+  let full = "";
 
-        // ----- エンジンの作成 -----
-        const engine = new webllm.MLCEngine();
+  try {
+    const chunks = await engine.chat.completions.create({
+      messages: [
+        { role: "system", content: "You are a helpful AI assistant. Answer in Japanese." },
+        { role: "user", content: text }
+      ],
+      stream: true,
+      temperature: 0.7
+    });
+    for await (const chunk of chunks) {
+      const delta = chunk.choices[0]?.delta?.content || "";
+      full += delta;
+      assistantEl.textContent = full;
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+  } catch (e) {
+    console.error(e);
+    assistantEl.textContent = `❌ エラー: ${e.message}`;
+  } finally {
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+    userInput.focus();
+  }
+}
 
-        // ----- メイン初期化処理 -----
-        async function init() {
-            try {
-                statusEl.textContent = `⏳ モデル「${MODEL_ID}」を読み込み中…（初回は数分かかることがあります）`;
+sendBtn.addEventListener("click", sendMessage);
+userInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    sendMessage();
+  }
+});
 
-                // モデルをロード（キャッシュがあればそれを使う）
-                await engine.reload(MODEL_ID);
-
-                statusEl.textContent = "✅ モデル準備完了！ メッセージを入力してください。";
-                userInput.disabled = false;
-                sendBtn.disabled = false;
-                userInput.focus();
-            } catch (err) {
-                console.error(err);
-                statusEl.textContent = `❌ エラー: ${err.message || "モデルの読み込みに失敗しました"}`;
-            }
-        }
-
-        // ----- チャット送信処理 -----
-        async function sendMessage() {
-            const text = userInput.value.trim();
-            if (!text) return;
-
-            // 入力をクリア & 無効化
-            userInput.value = "";
-            userInput.disabled = true;
-            sendBtn.disabled = true;
-
-            // ユーザーメッセージを表示
-            appendMessage("user", text);
-
-            // アシスタントのメッセージ枠を準備（ストリーミング中用）
-            const assistantMsg = appendMessage("assistant", "");
-            let fullContent = "";
-
-            try {
-                // ストリーミングで応答を生成
-                const chunks = await engine.chat.completions.create({
-                    messages: [
-                        { role: "user", content: text }
-                    ],
-                    stream: true, // ストリーミング有効
-                });
-
-                // チャンクを逐次表示
-                for await (const chunk of chunks) {
-                    const delta = chunk.choices[0]?.delta?.content || "";
-                    fullContent += delta;
-                    assistantMsg.textContent = fullContent;
-                    // 自動スクロール
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                }
-            } catch (err) {
-                console.error(err);
-                assistantMsg.textContent = `❌ エラー: ${err.message || "応答生成に失敗しました"}`;
-            } finally {
-                // 入力を再び有効化
-                userInput.disabled = false;
-                sendBtn.disabled = false;
-                userInput.focus();
-            }
-        }
-
-        // ----- メッセージ追加ヘルパー -----
-        function appendMessage(role, content) {
-            const div = document.createElement("div");
-            div.className = `message ${role}`;
-            div.textContent = content;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-            return div;
-        }
-
-        // ----- イベントリスナー -----
-        sendBtn.addEventListener("click", sendMessage);
-        userInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-
-        // ----- 起動！ -----
-        init();
-    </script>
-</body>
+init();
+</script>
+<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
 </html>
